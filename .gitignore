@@ -1,0 +1,9 @@
+# Compiled binaries
+infer
+lm
+
+# Binary data files
+*.bin
+
+# macOS
+.DS_Store

@@ -1,8 +1,8 @@
 #include "net.h"
-#include <cstdio>
+#include <iostream>
+#include <iomanip>
 #include <cstdlib>
 #include <cmath>
-#include <ctime>
 
 // 4 classes, each a cluster of points in 16-D space
 static const int INPUT_DIM    = 16;
@@ -54,9 +54,9 @@ int main() {
     const int   EPOCHS = 50, BATCH_SIZE = 32, STEPS = DATASET_SIZE / BATCH_SIZE;
     const float LR = 0.01f;
 
-    printf("Training  input=%d  classes=%d  batch=%d  lr=%.3f\n\n",
-           INPUT_DIM, NUM_CLASSES, BATCH_SIZE, LR);
-    printf("Epoch   Loss     Accuracy\n-----   ------   --------\n");
+    std::cout << "Training  input=" << INPUT_DIM << "  classes=" << NUM_CLASSES
+              << "  batch=" << BATCH_SIZE << "  lr=" << LR << "\n\n";
+    std::cout << "Epoch   Loss     Accuracy\n-----   ------   --------\n";
 
     for (int epoch = 0; epoch < EPOCHS; ++epoch) {
         float epoch_loss = 0.f;
@@ -72,9 +72,11 @@ int main() {
             epoch_loss += net.backward_and_update(probs, batch_y, LR);
         }
         if ((epoch + 1) % 5 == 0 || epoch == 0)
-            printf("  %3d     %.4f   %.1f%%\n", epoch + 1, epoch_loss / STEPS, accuracy(net));
+            std::cout << "  " << std::setw(3) << epoch + 1
+                      << "     " << std::fixed << std::setprecision(4) << epoch_loss / STEPS
+                      << "   " << std::setprecision(1) << accuracy(net) << "%\n";
     }
 
-    printf("\nDone.\n");
+    std::cout << "\nDone.\n";
     return 0;
 }

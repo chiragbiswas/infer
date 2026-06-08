@@ -1,7 +1,8 @@
 #include "embedding.h"
 #include "net.h"
 #include "charset.h"
-#include <cstdio>
+#include <iostream>
+#include <iomanip>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
@@ -17,7 +18,7 @@ static const float LR        = 0.05f;
 
 static std::vector<char> read_file(const char* path) {
     FILE* f = fopen(path, "rb");
-    if (!f) { perror(path); exit(1); }
+    if (!f) { std::cerr << "Cannot open " << path << "\n"; exit(1); }
     fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f);
     std::vector<char> buf(sz + 1);
     fread(buf.data(), 1, sz, f); buf[sz] = '\0';
@@ -25,7 +26,7 @@ static std::vector<char> read_file(const char* path) {
     return buf;
 }
 
-// Sample next token using temperature scaling
+// Sample next token with temperature scaling
 static int sample(const float* probs, int vocab_size, float temperature = 0.8f) {
     std::vector<float> p(vocab_size);
     float sum = 0.f;
@@ -43,7 +44,8 @@ static void generate(Embedding& emb, MLP& net, const Charset& cs,
     for (int i = 0; i < seed_len && i < CTX; ++i)
         ctx[CTX - seed_len + i] = cs.encode(seed[i]);
 
-    printf("\n--- Generated (seed: \"%s\") ---\n%s", seed, seed);
+    std::cout << "\n--- Generated (seed: \"" << seed << "\") ---\n" << seed;
+
     for (int t = 0; t < gen_len; ++t) {
         Tensor emb_out({CTX, EMBED_DIM});
         emb.forward(ctx, CTX, emb_out);
@@ -54,14 +56,12 @@ static void generate(Embedding& emb, MLP& net, const Charset& cs,
 
         Tensor probs = net.forward(input);
         int next = sample(probs.data, cs.size);
-        printf("%c", cs.decode(next));
-        fflush(stdout);
+        std::cout << cs.decode(next) << std::flush;
 
-        // Slide context window forward
         for (int i = 0; i < CTX - 1; ++i) ctx[i] = ctx[i + 1];
         ctx[CTX - 1] = next;
     }
-    printf("\n---\n");
+    std::cout << "\n---\n";
 }
 
 int main() {
@@ -73,7 +73,7 @@ int main() {
 
     Charset cs;
     cs.build(text, text_len);
-    printf("Text: %d chars  Vocab: %d\n", text_len, cs.size);
+    std::cout << "Text: " << text_len << " chars  Vocab: " << cs.size << "\n";
 
     std::vector<int> tokens(text_len);
     for (int i = 0; i < text_len; ++i) tokens[i] = cs.encode(text[i]);
@@ -82,7 +82,6 @@ int main() {
     Embedding emb(cs.size, EMBED_DIM);
     MLP net({input_dim, HIDDEN, HIDDEN, cs.size});
 
-    // Xavier init
     auto xavier = [](Tensor& W, int fan_in, int fan_out) {
         float limit = sqrtf(6.f / (fan_in + fan_out));
         for (size_t i = 0; i < W.numel; ++i)
@@ -92,7 +91,7 @@ int main() {
     for (auto& l : net.layers) xavier(l.W, l.in_features, l.out_features);
 
     int num_samples = text_len - CTX;
-    printf("Samples: %d\n\n", num_samples);
+    std::cout << "Samples: " << num_samples << "\n\n";
 
     std::vector<std::vector<int>> all_x(num_samples, std::vector<int>(CTX));
     std::vector<int>              all_y(num_samples);
@@ -101,15 +100,13 @@ int main() {
         all_y[i] = tokens[i + CTX];
     }
 
-    printf("Epoch   Loss\n-----   ------\n");
+    std::cout << "Epoch   Loss\n-----   ------\n";
     int steps = num_samples / BATCH;
 
     for (int epoch = 0; epoch < EPOCHS; ++epoch) {
         float epoch_loss = 0.f;
-
         for (int step = 0; step < steps; ++step) {
             int offset = step * BATCH;
-
             Tensor batch_x({BATCH, input_dim});
             int    batch_y[BATCH];
             for (int b = 0; b < BATCH; ++b) {
@@ -118,13 +115,10 @@ int main() {
                 memcpy(&batch_x.at(b, 0), emb_out.data, input_dim * sizeof(float));
                 batch_y[b] = all_y[offset + b];
             }
-
             Tensor probs = net.forward(batch_x);
-
             Tensor grad_input({BATCH, input_dim});
             epoch_loss += net.backward_and_update(probs, batch_y, LR, grad_input);
 
-            // Backprop into embeddings
             emb.zero_grad();
             for (int b = 0; b < BATCH; ++b) {
                 Tensor g_emb({CTX, EMBED_DIM});
@@ -133,9 +127,9 @@ int main() {
             }
             emb.update(LR);
         }
-
         if ((epoch + 1) % 5 == 0 || epoch == 0)
-            printf("  %3d     %.4f\n", epoch + 1, epoch_loss / steps);
+            std::cout << "  " << std::setw(3) << epoch + 1
+                      << "     " << std::fixed << std::setprecision(4) << epoch_loss / steps << "\n";
     }
 
     generate(emb, net, cs, "the ", 200);
